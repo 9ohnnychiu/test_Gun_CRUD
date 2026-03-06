@@ -79,7 +79,10 @@ Gun.js is initialized with relay peers from `NEXT_PUBLIC_GUN_PEERS`. Any browser
 
 ```ts
 const gun = Gun({
-  peers: process.env.NEXT_PUBLIC_GUN_PEERS.split(','),
+  peers: (process.env.NEXT_PUBLIC_GUN_PEERS ?? '')
+    .split(',')
+    .map((peer) => peer.trim())
+    .filter(Boolean),
 });
 ```
 
@@ -98,7 +101,10 @@ Inside `GunDemo.tsx` all four CRUD operations map directly to Gun.js APIs:
 
 ```ts
 const gun = Gun({
-  peers: process.env.NEXT_PUBLIC_GUN_PEERS.split(','),
+  peers: (process.env.NEXT_PUBLIC_GUN_PEERS ?? '')
+    .split(',')
+    .map((peer) => peer.trim())
+    .filter(Boolean),
 });
 const notesNode = gun.get(`demo-notes-app-v2-${roomId}`);
 
