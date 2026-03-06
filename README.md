@@ -2,7 +2,7 @@
 
 🚀 **Live Demo:** [https://9ohnnychiu.github.io/test_Gun_CRUD/](https://9ohnnychiu.github.io/test_Gun_CRUD/)
 
-A decentralized, offline-first notes app built with [Next.js](https://nextjs.org/) and [Gun.js](https://gun.eco/) to demonstrate full **CRUD** (Create, Read, Update, Delete) operations on a peer-to-peer database.
+A decentralized, real-time notes app built with [Next.js](https://nextjs.org/) and [Gun.js](https://gun.eco/) that demonstrates full **CRUD** (Create, Read, Update, Delete) operations on a peer-to-peer database — with **instant cross-browser synchronization**.
 
 ## Features
 
@@ -10,8 +10,10 @@ A decentralized, offline-first notes app built with [Next.js](https://nextjs.org
 - **Read** – Notes are streamed in real-time from the Gun.js graph database
 - **Update** – Inline editing with save/cancel controls
 - **Delete** – Remove notes instantly (set node to `null` in Gun.js)
-- **Offline-first** – Gun.js persists data locally and syncs when peers are available
-- **Decentralized** – No central server required; data lives in the browser via Gun.js
+- **Cross-browser sync** – Changes propagate instantly to every open tab or browser via Gun relay peers
+- **Shareable rooms** – Each session gets a unique URL (`?room=<id>`) that can be shared so others join the same live room
+- **Visual sync feedback** – Cards flash with an indigo highlight when they receive a remote update
+- **Offline-first** – Gun.js persists data locally and re-syncs automatically when connectivity is restored
 
 ## Tech Stack
 
@@ -65,6 +67,21 @@ A decentralized, offline-first notes app built with [Next.js](https://nextjs.org
 | `npm run lint` | Run ESLint |
 | `npm run clean` | Clean the Next.js build cache |
 
+## How Cross-Browser Sync Works
+
+Gun.js is initialized with public relay peers. Any browser that loads the same room URL automatically connects to these peers and receives all changes in real time:
+
+```ts
+const gun = Gun({
+  peers: [
+    'https://gun-manhattan.herokuapp.com/gun',
+    'https://peer.wallie.io/gun',
+  ],
+});
+```
+
+When you open the app, it appends a unique `?room=<id>` to the URL. Gun scopes its data graph to that room, so only browsers sharing the same link see the same notes. Copy the link and open it in a second browser — every create, update, and delete will appear instantly in both windows.
+
 ## How It Works
 
 Gun.js is initialized client-side only (SSR is disabled via `next/dynamic`) because it relies on browser APIs such as `window` and `localStorage`.
@@ -77,13 +94,15 @@ const GunDemo = dynamic(() => import('@/components/GunDemo'), { ssr: false });
 Inside `GunDemo.tsx` all four CRUD operations map directly to Gun.js APIs:
 
 ```ts
-const gun = Gun();
-const notesNode = gun.get('demo-notes-app-v2');
+const gun = Gun({
+  peers: ['https://gun-manhattan.herokuapp.com/gun', 'https://peer.wallie.io/gun'],
+});
+const notesNode = gun.get(`demo-notes-app-v2-${roomId}`);
 
 // Create
 notesNode.get(id).put(newNote);
 
-// Read (real-time listener)
+// Read (real-time listener — fires on every peer update)
 notesNode.map().on((note, id) => { /* update state */ });
 
 // Update
@@ -92,3 +111,10 @@ notesNode.get(id).put({ text: updatedText });
 // Delete
 notesNode.get(id).put(null);
 ```
+
+## Testing Cross-Browser Sync
+
+1. Open [the live demo](https://9ohnnychiu.github.io/test_Gun_CRUD/) — a unique room URL is generated automatically.
+2. Copy the URL from the indigo banner at the top of the page.
+3. Paste it into a second browser window (or a different browser / incognito tab).
+4. Add, edit, or delete a note in one window — you'll see the change appear in the other within a second.

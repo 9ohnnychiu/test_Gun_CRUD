@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Gun from 'gun';
-import { Trash2, Edit2, Check, X, Plus } from 'lucide-react';
+import { Trash2, Edit2, Check, X, Plus, Copy, CheckCheck, Wifi, WifiOff } from 'lucide-react';
 
 interface Note {
   id: string;
@@ -10,26 +10,60 @@ interface Note {
   createdAt: number;
 }
 
+// Public Gun relay peers for cross-browser synchronization
+const GUN_PEERS = [
+  'https://gun-manhattan.herokuapp.com/gun',
+  'https://peer.wallie.io/gun',
+];
+
 export default function GunDemo() {
   const [notes, setNotes] = useState<Record<string, Note>>({});
   const [newNoteText, setNewNoteText] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-  
+  // Compute the room ID once from the URL (or generate a new one).
+  // This component is client-only (SSR disabled), so window is always available.
+  const [roomId] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const existing = params.get('room');
+    if (existing) return existing;
+    const room = crypto.randomUUID().replace(/-/g, '').substring(0, 10);
+    window.history.replaceState({}, '', `${window.location.pathname}?room=${room}`);
+    return room;
+  });
+  const [copied, setCopied] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [recentlyUpdated, setRecentlyUpdated] = useState<Set<string>>(new Set());
+
   const gunRef = useRef<any>(null);
   const notesNodeRef = useRef<any>(null);
+  // Collect all highlight-removal timeout IDs so they can be cleared on unmount
+  const highlightTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  // Initialize Gun once on mount (roomId is stable for the component lifetime)
   useEffect(() => {
-    // Initialize Gun
-    const gun = Gun();
+    // Connect to relay peers so changes propagate across browsers instantly
+    const gun = Gun({ peers: GUN_PEERS });
     gunRef.current = gun;
-    
-    // Use a unique node name for this demo
-    const notesNode = gun.get('demo-notes-app-v2');
+
+    // Scope data to the current room for isolation
+    const notesNode = gun.get(`demo-notes-app-v2-${roomId}`);
     notesNodeRef.current = notesNode;
 
-    // Read: Listen for changes
+    // Read: Listen for real-time changes from all peers
     notesNode.map().on((note: any, id: string) => {
+      if (note) {
+        // Flash the card briefly to signal a remote update
+        setRecentlyUpdated((prev) => new Set([...prev, id]));
+        const t = setTimeout(() => {
+          setRecentlyUpdated((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        }, 1500);
+        highlightTimeoutsRef.current.push(t);
+      }
       setNotes((prev) => {
         if (note) {
           return { ...prev, [id]: note as Note };
@@ -40,21 +74,30 @@ export default function GunDemo() {
         }
       });
     });
+
+    // Mark as connected after Gun has had a moment to reach the relay peers
+    const timer = setTimeout(() => setIsConnected(true), 1000);
+    const highlightTimeouts = highlightTimeoutsRef.current;
+    return () => {
+      clearTimeout(timer);
+      highlightTimeouts.forEach(clearTimeout);
+    };
+  }, [roomId]);
+
+  const handleCopyRoomUrl = useCallback(() => {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }, []);
 
   const handleAddNote = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newNoteText.trim() || !notesNodeRef.current) return;
 
-    // Generate a random ID
-    const id = Math.random().toString(36).substring(2, 15);
-    const newNote = {
-      id,
-      text: newNoteText,
-      createdAt: Date.now(),
-    };
-
     // Create: Put the new note into the Gun node
+    const id = crypto.randomUUID();
+    const newNote = { id, text: newNoteText, createdAt: Date.now() };
     notesNodeRef.current.get(id).put(newNote);
     setNewNoteText('');
   };
@@ -72,8 +115,7 @@ export default function GunDemo() {
 
   const handleSaveEdit = (id: string) => {
     if (!editText.trim() || !notesNodeRef.current) return;
-    
-    // Update: Put the updated text into the specific note node
+    // Update: Merge the new text into the existing node
     notesNodeRef.current.get(id).put({ text: editText });
     setEditingId(null);
   };
@@ -88,13 +130,46 @@ export default function GunDemo() {
     .filter((note) => note && note.id && note.text)
     .sort((a, b) => b.createdAt - a.createdAt);
 
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+
   return (
     <div className="min-h-screen bg-zinc-50 py-12 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-3xl mx-auto">
         <div className="bg-white rounded-2xl shadow-sm border border-zinc-200 overflow-hidden">
           <div className="p-6 sm:p-8 border-b border-zinc-200 bg-zinc-50/50">
-            <h1 className="text-3xl font-semibold text-zinc-900 tracking-tight">Gun.js CRUD Demo</h1>
-            <p className="mt-2 text-zinc-500">A decentralized, offline-first notes app using Gun.js.</p>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-semibold text-zinc-900 tracking-tight">Gun.js CRUD Demo</h1>
+                <p className="mt-2 text-zinc-500">
+                  Real-time, cross-browser notes powered by Gun.js. Open this page in multiple browsers or tabs to see instant sync.
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0 mt-1">
+                {isConnected ? (
+                  <Wifi className="w-4 h-4 text-emerald-500" />
+                ) : (
+                  <WifiOff className="w-4 h-4 text-zinc-400" />
+                )}
+                <span className={`text-xs font-medium ${isConnected ? 'text-emerald-600' : 'text-zinc-400'}`}>
+                  {isConnected ? 'Live' : 'Connecting…'}
+                </span>
+              </div>
+            </div>
+
+            {/* Room share banner */}
+            <div className="mt-4 flex items-center gap-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-indigo-700 mb-0.5">Share this link to sync across browsers</p>
+                <p className="text-xs text-indigo-500 font-mono truncate">{shareUrl}</p>
+              </div>
+              <button
+                onClick={handleCopyRoomUrl}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
+              >
+                {copied ? <CheckCheck className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? 'Copied!' : 'Copy link'}
+              </button>
+            </div>
           </div>
 
           <div className="p-6 sm:p-8">
@@ -129,7 +204,11 @@ export default function GunDemo() {
                 sortedNotes.map((note) => (
                   <div
                     key={note.id}
-                    className="flex items-center justify-between p-4 rounded-xl border border-zinc-200 bg-white shadow-sm hover:border-zinc-300 transition-colors group"
+                    className={`flex items-center justify-between p-4 rounded-xl border bg-white shadow-sm hover:border-zinc-300 transition-all group ${
+                      recentlyUpdated.has(note.id)
+                        ? 'border-indigo-300 bg-indigo-50/30'
+                        : 'border-zinc-200'
+                    }`}
                   >
                     {editingId === note.id ? (
                       <div className="flex-1 flex items-center gap-3 mr-4">
