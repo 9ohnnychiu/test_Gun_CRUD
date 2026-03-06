@@ -50,11 +50,12 @@ A decentralized, real-time notes app built with [Next.js](https://nextjs.org/) a
    npm install
    ```
 
-2. **Configure relay peers (required for cross-browser sync):**
+2. **Configure relay peers (optional for local dev — required in production for cross-browser sync):**
    ```bash
    # .env.local
    NEXT_PUBLIC_GUN_PEERS="https://your-relay.example/gun"
    ```
+   If this variable is not set, the app automatically falls back to a public community relay peer (`https://peer.wallie.io/gun`), so cross-browser sync works out-of-the-box without any configuration.
 
 3. **Run the development server:**
    ```bash
@@ -62,6 +63,19 @@ A decentralized, real-time notes app built with [Next.js](https://nextjs.org/) a
    ```
 
 4. **Open** [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Deploying to GitHub Pages
+
+The included GitHub Actions workflow (`.github/workflows/nextjs.yml`) builds and deploys the app automatically on every push to `main`.
+
+For cross-browser sync to work on the deployed site you can optionally pin your own relay peers:
+
+1. Go to your repository **Settings → Secrets and variables → Actions**.
+2. Click **New repository secret**.
+3. Set **Name** to `NEXT_PUBLIC_GUN_PEERS` and **Value** to a comma-separated list of HTTPS Gun relay endpoints, e.g. `https://your-relay.example/gun`.
+4. Push a new commit to `main` — the workflow will pick up the secret and bake the relay URL into the static build.
+
+If the secret is not set, the app falls back to the public community relay automatically.
 
 ## Available Scripts
 

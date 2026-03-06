@@ -21,10 +21,15 @@ interface GunEventListener {
 
 // Configure relay peers via env so stale public relays can be replaced without code changes.
 // Example: NEXT_PUBLIC_GUN_PEERS="https://my-relay.example/gun,https://backup-relay.example/gun"
-const GUN_PEERS = (process.env.NEXT_PUBLIC_GUN_PEERS ?? '')
+const CONFIGURED_PEERS = (process.env.NEXT_PUBLIC_GUN_PEERS ?? '')
   .split(',')
   .map((peer) => peer.trim())
   .filter(Boolean);
+
+// Fall back to a public community relay so cross-browser sync works on the GitHub Pages demo
+// even when no custom relay is configured via the NEXT_PUBLIC_GUN_PEERS environment variable.
+const FALLBACK_PEERS = ['https://peer.wallie.io/gun'];
+const GUN_PEERS = CONFIGURED_PEERS.length > 0 ? CONFIGURED_PEERS : FALLBACK_PEERS;
 
 const getPeerKey = (peer: GunPeerEvent): string => {
   if (typeof peer?.url === 'string' && peer.url) return peer.url;

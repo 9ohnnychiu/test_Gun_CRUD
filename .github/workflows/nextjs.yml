@@ -72,6 +72,12 @@ jobs:
         run: ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
       - name: Build with Next.js
         run: ${{ steps.detect-package-manager.outputs.runner }} next build
+        env:
+          # Pass a custom comma-separated list of Gun relay peers from a repository secret.
+          # If the secret is not set, the app falls back to a public community relay peer.
+          # To configure: Settings → Secrets and variables → Actions → New repository secret
+          # Name: NEXT_PUBLIC_GUN_PEERS  Value: https://your-relay.example/gun
+          NEXT_PUBLIC_GUN_PEERS: ${{ secrets.NEXT_PUBLIC_GUN_PEERS }}
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
