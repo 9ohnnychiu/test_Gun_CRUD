@@ -10,11 +10,27 @@ interface Note {
   createdAt: number;
 }
 
-// Public Gun relay peers for cross-browser synchronization
-const GUN_PEERS = [
-  'https://gun-manhattan.herokuapp.com/gun',
-  'https://peer.wallie.io/gun',
-];
+interface GunPeerEvent {
+  url?: string;
+  id?: string;
+}
+
+interface GunEventListener {
+  off?: () => void;
+}
+
+// Configure relay peers via env so stale public relays can be replaced without code changes.
+// Example: NEXT_PUBLIC_GUN_PEERS="https://my-relay.example/gun,https://backup-relay.example/gun"
+const GUN_PEERS = (process.env.NEXT_PUBLIC_GUN_PEERS ?? '')
+  .split(',')
+  .map((peer) => peer.trim())
+  .filter(Boolean);
+
+const getPeerKey = (peer: GunPeerEvent): string => {
+  if (typeof peer?.url === 'string' && peer.url) return peer.url;
+  if (typeof peer?.id === 'string' && peer.id) return peer.id;
+  return JSON.stringify(peer ?? {});
+};
 
 export default function GunDemo() {
   const [notes, setNotes] = useState<Record<string, Note>>({});
@@ -28,12 +44,15 @@ export default function GunDemo() {
     const existing = params.get('room');
     if (existing) return existing;
     const room = crypto.randomUUID().replace(/-/g, '').substring(0, 10);
-    window.history.replaceState({}, '', `${window.location.pathname}?room=${room}`);
+    params.set('room', room);
+    const query = params.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
     return room;
   });
   const [copied, setCopied] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [recentlyUpdated, setRecentlyUpdated] = useState<Set<string>>(new Set());
+  const hasRelayPeers = GUN_PEERS.length > 0;
 
   const gunRef = useRef<any>(null);
   const notesNodeRef = useRef<any>(null);
@@ -45,6 +64,26 @@ export default function GunDemo() {
     // Connect to relay peers so changes propagate across browsers instantly
     const gun = Gun({ peers: GUN_PEERS });
     gunRef.current = gun;
+    let isMounted = true;
+    const scheduleConnectionUpdate = (nextConnected: boolean) => {
+      queueMicrotask(() => {
+        if (isMounted) setIsConnected(nextConnected);
+      });
+    };
+
+    const activePeers = new Set<string>();
+    const onPeerHi = (peer: GunPeerEvent) => {
+      const key = getPeerKey(peer);
+      activePeers.add(key);
+      scheduleConnectionUpdate(activePeers.size > 0);
+    };
+    const onPeerBye = (peer: GunPeerEvent) => {
+      const key = getPeerKey(peer);
+      activePeers.delete(key);
+      scheduleConnectionUpdate(activePeers.size > 0);
+    };
+    const hiListener = gun.on('hi', onPeerHi) as GunEventListener | undefined;
+    const byeListener = gun.on('bye', onPeerBye) as GunEventListener | undefined;
 
     // Scope data to the current room for isolation
     const notesNode = gun.get(`demo-notes-app-v2-${roomId}`);
@@ -75,12 +114,13 @@ export default function GunDemo() {
       });
     });
 
-    // Mark as connected after Gun has had a moment to reach the relay peers
-    const timer = setTimeout(() => setIsConnected(true), 1000);
     const highlightTimeouts = highlightTimeoutsRef.current;
     return () => {
-      clearTimeout(timer);
+      hiListener?.off?.();
+      byeListener?.off?.();
+      isMounted = false;
       highlightTimeouts.forEach(clearTimeout);
+      setIsConnected(false);
     };
   }, [roomId]);
 
@@ -130,7 +170,15 @@ export default function GunDemo() {
     .filter((note) => note && note.id && note.text)
     .sort((a, b) => b.createdAt - a.createdAt);
 
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const shareUrl =
+    typeof window !== 'undefined'
+      ? (() => {
+          const url = new URL(window.location.href);
+          url.searchParams.set('room', roomId);
+          return url.toString();
+        })()
+      : '';
+  const connectionStatusLabel = isConnected ? 'Live' : hasRelayPeers ? 'Relay offline' : 'No relay configured';
 
   return (
     <div className="min-h-screen bg-zinc-50 py-12 px-4 sm:px-6 lg:px-8 font-sans">
@@ -145,13 +193,9 @@ export default function GunDemo() {
                 </p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0 mt-1">
-                {isConnected ? (
-                  <Wifi className="w-4 h-4 text-emerald-500" />
-                ) : (
-                  <WifiOff className="w-4 h-4 text-zinc-400" />
-                )}
+                {isConnected ? <Wifi className="w-4 h-4 text-emerald-500" /> : <WifiOff className="w-4 h-4 text-zinc-400" />}
                 <span className={`text-xs font-medium ${isConnected ? 'text-emerald-600' : 'text-zinc-400'}`}>
-                  {isConnected ? 'Live' : 'Connecting…'}
+                  {connectionStatusLabel}
                 </span>
               </div>
             </div>

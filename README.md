@@ -50,12 +50,18 @@ A decentralized, real-time notes app built with [Next.js](https://nextjs.org/) a
    npm install
    ```
 
-2. **Run the development server:**
+2. **Configure relay peers (required for cross-browser sync):**
+   ```bash
+   # .env.local
+   NEXT_PUBLIC_GUN_PEERS="https://your-relay.example/gun"
+   ```
+
+3. **Run the development server:**
    ```bash
    npm run dev
    ```
 
-3. **Open** [http://localhost:3000](http://localhost:3000) in your browser.
+4. **Open** [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Available Scripts
 
@@ -69,14 +75,14 @@ A decentralized, real-time notes app built with [Next.js](https://nextjs.org/) a
 
 ## How Cross-Browser Sync Works
 
-Gun.js is initialized with public relay peers. Any browser that loads the same room URL automatically connects to these peers and receives all changes in real time:
+Gun.js is initialized with relay peers from `NEXT_PUBLIC_GUN_PEERS`. Any browser that loads the same room URL automatically connects to those peers and receives all changes in real time:
 
 ```ts
 const gun = Gun({
-  peers: [
-    'https://gun-manhattan.herokuapp.com/gun',
-    'https://peer.wallie.io/gun',
-  ],
+  peers: (process.env.NEXT_PUBLIC_GUN_PEERS ?? '')
+    .split(',')
+    .map((peer) => peer.trim())
+    .filter(Boolean),
 });
 ```
 
@@ -95,7 +101,10 @@ Inside `GunDemo.tsx` all four CRUD operations map directly to Gun.js APIs:
 
 ```ts
 const gun = Gun({
-  peers: ['https://gun-manhattan.herokuapp.com/gun', 'https://peer.wallie.io/gun'],
+  peers: (process.env.NEXT_PUBLIC_GUN_PEERS ?? '')
+    .split(',')
+    .map((peer) => peer.trim())
+    .filter(Boolean),
 });
 const notesNode = gun.get(`demo-notes-app-v2-${roomId}`);
 
@@ -111,6 +120,16 @@ notesNode.get(id).put({ text: updatedText });
 // Delete
 notesNode.get(id).put(null);
 ```
+
+## Troubleshooting Relay Errors
+
+If DevTools shows messages like:
+
+- `WebSocket connection to 'wss://.../gun' failed`
+- status stays `Relay offline`
+
+then your configured relay URL is unreachable (offline, blocked by network/CORS, or no longer maintained).  
+Fix it by pointing `NEXT_PUBLIC_GUN_PEERS` to a reachable Gun relay endpoint (or your own relay), then restart the app.
 
 ## Testing Cross-Browser Sync
 
