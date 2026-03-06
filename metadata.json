@@ -1,0 +1,5 @@
+{
+  "name": "Gun.js CRUD Demo",
+  "description": "A decentralized, offline-first notes app using Gun.js to demonstrate CRUD operations.",
+  "requestFramePermissions": []
+}
