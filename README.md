@@ -1,5 +1,7 @@
 # Gun.js CRUD Demo
 
+🚀 **Live Demo:** [https://9ohnnychiu.github.io/test_Gun_CRUD/](https://9ohnnychiu.github.io/test_Gun_CRUD/)
+
 A decentralized, offline-first notes app built with [Next.js](https://nextjs.org/) and [Gun.js](https://gun.eco/) to demonstrate full **CRUD** (Create, Read, Update, Delete) operations on a peer-to-peer database.
 
 ## Features
